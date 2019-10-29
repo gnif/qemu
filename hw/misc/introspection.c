@@ -100,19 +100,31 @@
   Socket communication defines
 */
 
-#define INTRO_MSG_RESET   0x1
-#define INTRO_MSG_SEGMENT 0x2
-#define INTRO_MSG_FINISH  0x3
-
-typedef uint32_t MsgReset;
-
 typedef struct {
-  uint32_t type;
   uint64_t addr;
   uint32_t size;
 } __attribute__ ((packed)) MsgSegment;
 
-typedef uint32_t MsgFinish;
+typedef struct {
+  uint32_t type;
+} __attribute__ ((packed)) MsgFinish;
+
+typedef struct {
+  uint32_t msg;
+  union
+  {
+    MsgSegment segment;
+    MsgFinish  finish;
+  } u;
+} __attribute__ ((packed)) Msg;
+
+#define INTRO_MSG_RESET   0x1
+#define INTRO_MSG_SEGMENT 0x2
+#define INTRO_MSG_FINISH  0x3
+
+#define INTRO_MSG_RESET_SIZE   (sizeof(uint32_t))
+#define INTRO_MSG_SEGMENT_SIZE (sizeof(uint32_t) + sizeof(MsgSegment))
+#define INTRO_MSG_FINISH_SIZE  (sizeof(uint32_t) + sizeof(MsgFinish))
 
 // all registers are 32-bit
 enum IntoRegs {
@@ -271,9 +283,9 @@ static void intro_handle_reset(IntroState *intro)
     }
 
     // send a segment reset message
-    MsgReset msg = INTRO_MSG_RESET;
+    Msg msg = { .msg = INTRO_MSG_RESET };
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
-        sizeof(msg)) != sizeof(msg)) {
+        INTRO_MSG_RESET_SIZE) != INTRO_MSG_RESET_SIZE) {
       intro->msg.cr |= REG_MSG_CR_NOCONN;
     }
 
@@ -303,10 +315,11 @@ static void intro_handle_add_segment(IntroState *intro)
     }
 
     // setup the message
-    MsgSegment msg;
-    msg.type = INTRO_MSG_SEGMENT;
-    msg.addr = mrs.offset_within_region;
-    msg.size = intro->msg.size;
+    Msg msg = {
+      .msg            = INTRO_MSG_SEGMENT,
+      .u.segment.addr = mrs.offset_within_region,
+      .u.segment.size = intro->msg.size
+    };
 
     // also send the system memory fd so that it can be mapped
     int fd = memory_region_get_fd(mrs.mr);
@@ -318,7 +331,7 @@ static void intro_handle_add_segment(IntroState *intro)
 
     // send the segment info
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
-        sizeof(msg)) != sizeof(msg)) {
+        INTRO_MSG_SEGMENT_SIZE) != INTRO_MSG_SEGMENT_SIZE) {
       intro->msg.cr |= REG_MSG_CR_NOCONN;
     }
 
@@ -334,9 +347,12 @@ static void intro_handle_finish(IntroState *intro) {
     }
 
     // send the finish message
-    MsgFinish msg = INTRO_MSG_FINISH;
+    Msg msg = {
+      .msg           = INTRO_MSG_FINISH,
+      .u.finish.type = intro->msg.type
+    };
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
-        sizeof(msg)) != sizeof(msg)) {
+        INTRO_MSG_FINISH_SIZE) != INTRO_MSG_FINISH_SIZE) {
       intro->msg.cr |= REG_MSG_CR_NOCONN;
     }
 
