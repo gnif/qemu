@@ -101,6 +101,11 @@
 */
 
 typedef struct {
+  uint64_t id;
+} __attribute__ ((packed)) MsgFd;
+
+typedef struct {
+  uint64_t fd_id;
   uint64_t addr;
   uint32_t size;
 } __attribute__ ((packed)) MsgSegment;
@@ -113,16 +118,19 @@ typedef struct {
   uint32_t msg;
   union
   {
+    MsgFd      fd;
     MsgSegment segment;
     MsgFinish  finish;
   } u;
 } __attribute__ ((packed)) Msg;
 
 #define INTRO_MSG_RESET   0x1
-#define INTRO_MSG_SEGMENT 0x2
-#define INTRO_MSG_FINISH  0x3
+#define INTRO_MSG_FD      0x2
+#define INTRO_MSG_SEGMENT 0x3
+#define INTRO_MSG_FINISH  0x4
 
 #define INTRO_MSG_RESET_SIZE   (sizeof(uint32_t))
+#define INTRO_MSG_FD_SIZE      (sizeof(uint32_t) + sizeof(MsgFd))
 #define INTRO_MSG_SEGMENT_SIZE (sizeof(uint32_t) + sizeof(MsgSegment))
 #define INTRO_MSG_FINISH_SIZE  (sizeof(uint32_t) + sizeof(MsgFinish))
 
@@ -152,6 +160,8 @@ typedef struct {
     uint32_t size;
 } MsgRegs;
 
+#define MAX_FDS 16
+
 typedef struct {
     PCIDevice    pdev;
     MemoryRegion mmio;
@@ -165,6 +175,7 @@ typedef struct {
     uint8_t     buffer[1024];
     int         buffer_pos;
     int         watch;
+    int         sent_fds[MAX_FDS];
 
     // registers
     uint32_t status;
@@ -314,17 +325,57 @@ static void intro_handle_add_segment(IntroState *intro)
       return;
     }
 
-    // setup the message
+    // get the fd for the RAM
+    int fd = memory_region_get_fd(mrs.mr);
+    if (fd == -1) {
+      memory_region_unref(mrs.mr);
+      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
+      return;
+    }
+
+    // see if we have already sent the fd to the client for this region
+    int i;
+    int fd_index = -1;
+    for(i = 0; i < MAX_FDS && intro->sent_fds[i] != -1; ++i) {
+      if (intro->sent_fds[i] == fd) {
+        fd_index = i;
+        break;
+      }
+    }
+
+    // check if not found
+    if (fd_index == -1) {
+      // check if out of room
+      if (i == MAX_FDS) {
+        memory_region_unref(mrs.mr);
+        intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
+        return;
+      }
+
+      // flag fd as sent
+      intro->sent_fds[i] = fd;
+
+      // send the fd with the id
+      Msg msg = {
+        .msg     = INTRO_MSG_FD,
+        .u.fd.id = memory_region_get_ram_addr(mrs.mr)
+      };
+
+      qemu_chr_fe_set_msgfds(&intro->chardev, &fd, 1);
+      if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
+          INTRO_MSG_FD_SIZE) != INTRO_MSG_FD_SIZE) {
+        memory_region_unref(mrs.mr);
+        intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
+        return;
+      }
+    }
+
+    // send the segment message
     Msg msg = {
       .msg            = INTRO_MSG_SEGMENT,
       .u.segment.addr = mrs.offset_within_region,
       .u.segment.size = intro->msg.size
     };
-
-    // also send the system memory fd so that it can be mapped
-    int fd = memory_region_get_fd(mrs.mr);
-    if (fd != -1)
-      qemu_chr_fe_set_msgfds(&intro->chardev, &fd, 1);
 
     // release the memory region
     memory_region_unref(mrs.mr);
@@ -424,6 +475,10 @@ static void intro_chr_event(void *opaque, int event)
               g_source_remove(intro->watch);
               intro->watch = 0;
           }
+
+          for(int i = 0; i < MAX_FDS; ++i)
+            intro->sent_fds[i] = -1;
+
           break;
     }
 }
@@ -476,6 +531,8 @@ static void intro_instance_init(Object *obj)
     IntroState *intro = INTRO(obj);
 
     memset(&intro->msg, 0, sizeof(intro->msg));
+    for(int i = 0; i < MAX_FDS; ++i)
+      intro->sent_fds[i] = -1;
 }
 
 static Property intro_properties[] = {
