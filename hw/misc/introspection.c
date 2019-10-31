@@ -73,46 +73,60 @@
   C  = Clear
 */
 
-#define REG_STATUS_WRITE_MASK (0x0)
+#define INTRO_REG_CR_START       (1 << 1) // SW=S, HW=C, start of a mapping
+#define INTRO_REG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C, add a segment to mapping
+#define INTRO_REG_CR_FINISH      (1 << 3) // SW=S, HW=C, end of segments
+#define INTRO_REG_CR_UNMAP       (1 << 4) // SW=S, HW=C, unmap a segment
 
-#define REG_MSG_CR_RESET       (1 << 1) // SW=S, HW=C
-#define REG_MSG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C
-#define REG_MSG_CR_FINISH      (1 << 3) // SW=S, HW=C
-#define REG_MSG_CR_TIMEOUT     (1 << 4) // HW=S, HW=C
-#define REG_MSG_CR_BADADDR     (1 << 5) // HW=S, HW=C
-#define REG_MSG_CR_NOCONN      (1 << 6) // HW=S, HW=C
+#define INTRO_REG_CR_TIMEOUT     (1 << 5) // HW=S, HW=C, timeout occured
+#define INTRO_REG_CR_BADADDR     (1 << 6) // HW=S, HW=C, bad address specified
+#define INTRO_REG_CR_NOCONN      (1 << 7) // HW=S, HW=C, no client connection
+#define INTRO_REG_CR_NORES       (1 << 8) // HW=S, HW=C, no resources left
+#define INTRO_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
 
-#define REG_MSG_CR_WRITE_MASK ( \
-    REG_MSG_CR_RESET       | \
-    REG_MSG_CR_ADD_SEGMENT | \
-    REG_MSG_CR_FINISH      | \
+#define INTRO_REG_CR_WRITE_MASK ( \
+    INTRO_REG_CR_START       | \
+    INTRO_REG_CR_ADD_SEGMENT | \
+    INTRO_REG_CR_FINISH      | \
+    INTRO_REG_CR_UNMAP       | \
     0x0 \
 )
 
-#define REG_MSG_CR_CLEAR_MASK ( \
-    REG_MSG_CR_TIMEOUT | \
-    REG_MSG_CR_BADADDR | \
-    REG_MSG_CR_NOCONN  | \
+#define INTRO_REG_CR_CLEAR_MASK ( \
+    INTRO_REG_CR_TIMEOUT | \
+    INTRO_REG_CR_BADADDR | \
+    INTRO_REG_CR_NOCONN  | \
+    INTRO_REG_CR_NORES   | \
+    INTRO_REG_CR_DEVERR  | \
     0x0 \
 )
+
+#define INTRO_REG_CR_SET_ERR(clear, set) \
+  intro->regs.cr = (intro->regs.cr & ~((clear) & INTRO_REG_CR_WRITE_MASK)) | \
+      ((set) & INTRO_REG_CR_CLEAR_MASK)
 
 /*
   Socket communication defines
 */
 
 typedef struct {
-  uint64_t id;
+  uint32_t id;    // the ID of the FD
 } __attribute__ ((packed)) MsgFd;
 
 typedef struct {
-  uint64_t fd_id;
-  uint64_t addr;
-  uint32_t size;
+  uint32_t fd_id; // the ID of the FD for this segment
+  uint32_t size;  // the size of this segment
+  uint64_t addr;  // the base address of this segment
 } __attribute__ ((packed)) MsgSegment;
 
 typedef struct {
-  uint32_t type;
+  uint32_t type; // the application defined type
+  uint32_t id;   // the ID of the new mapping
 } __attribute__ ((packed)) MsgFinish;
+
+typedef struct {
+  uint32_t id;   // the mapping ID
+} __attribute__ ((packed)) MsgUnmap;
 
 typedef struct {
   uint32_t msg;
@@ -121,34 +135,35 @@ typedef struct {
     MsgFd      fd;
     MsgSegment segment;
     MsgFinish  finish;
+    MsgUnmap   unmap;
   } u;
 } __attribute__ ((packed)) Msg;
 
-#define INTRO_MSG_RESET   0x1
-#define INTRO_MSG_FD      0x2
-#define INTRO_MSG_SEGMENT 0x3
-#define INTRO_MSG_FINISH  0x4
+#define INTRO_MSG_MAP     0x1 // start of a map sequence
+#define INTRO_MSG_FD      0x2 // file descriptor
+#define INTRO_MSG_SEGMENT 0x3 // map segment
+#define INTRO_MSG_FINISH  0x4 // finish of map sequence
+#define INTRO_MSG_UNMAP   0x5 // unmap a previous map
 
-#define INTRO_MSG_RESET_SIZE   (sizeof(uint32_t))
+#define INTRO_MSG_MAP_SIZE     (sizeof(uint32_t))
 #define INTRO_MSG_FD_SIZE      (sizeof(uint32_t) + sizeof(MsgFd))
 #define INTRO_MSG_SEGMENT_SIZE (sizeof(uint32_t) + sizeof(MsgSegment))
 #define INTRO_MSG_FINISH_SIZE  (sizeof(uint32_t) + sizeof(MsgFinish))
+#define INTRO_MSG_UNMAP_SIZE   (sizeof(uint32_t) + sizeof(MsgUnmap))
 
 // all registers are 32-bit
 enum IntoRegs {
-    // reserved for possible future use
-    INTRO_REG_STATUS = 0,
-
-    // guest to host transfer, maximum one page (4kb)
-    // registers are readonly while REG_STATUS_MSG_WRITE is set
-    INTRO_REG_MSG_CR,
+    // registers are readonly while any of REG_STATUS_CR_WRITE_MASK is set
+    INTRO_INTRO_REG_CR = 0,
     INTRO_REG_MSG_TYPE,
     INTRO_REG_MSG_ADDR_L,
     INTRO_REG_MSG_ADDR_H,
     INTRO_REG_MSG_SIZE,
 
+    // pow2 padding
     INTRO_REG_RESERVED1,
     INTRO_REG_RESERVED2,
+    INTRO_REG_RESERVED3,
 
     INTRO_REG_LAST
 };
@@ -158,9 +173,10 @@ typedef struct {
     uint32_t type;
     hwaddr   addr;
     uint32_t size;
-} MsgRegs;
+} IntroRegs;
 
-#define MAX_FDS 16
+#define MAX_FDS  16
+#define MAX_MAPS 32
 
 typedef struct {
     PCIDevice    pdev;
@@ -175,18 +191,28 @@ typedef struct {
     uint8_t     buffer[1024];
     int         buffer_pos;
     int         watch;
+
     int         sent_fds[MAX_FDS];
+    uint32_t    fd_ids[MAX_FDS];
+    uint32_t    last_fd_id;
+
+    // mapping state tracking
+    bool        finished;
+    int         segments;
+    int         map_count;
+    bool        map_used[MAX_MAPS];
+    int         pending_unmap;
 
     // registers
-    uint32_t status;
-    MsgRegs  msg;
+    IntroRegs regs;
 
 } IntroState;
 
 // forwards
-static void intro_handle_reset(IntroState *intro);
+static void intro_handle_start(IntroState *intro);
 static void intro_handle_add_segment(IntroState *intro);
 static void intro_handle_finish(IntroState *intro);
+static void intro_handle_unmap(IntroState *intro);
 
 static uint64_t intro_mmio_read(void *opaque, hwaddr addr, unsigned size)
 {
@@ -194,20 +220,17 @@ static uint64_t intro_mmio_read(void *opaque, hwaddr addr, unsigned size)
 
     switch(addr >> 2)
     {
-        case INTRO_REG_STATUS:
-            return intro->status;
-
-        case INTRO_REG_MSG_CR:
-            return intro->msg.cr;
+        case INTRO_INTRO_REG_CR:
+            return intro->regs.cr;
 
         case INTRO_REG_MSG_ADDR_L:
-            return intro->msg.addr & 0xFFFFFFFF;
+            return intro->regs.addr & 0xFFFFFFFF;
 
         case INTRO_REG_MSG_ADDR_H:
-            return (intro->msg.addr >> 32) & 0xFFFFFFFF;
+            return (intro->regs.addr >> 32) & 0xFFFFFFFF;
 
         case INTRO_REG_MSG_SIZE:
-            return intro->msg.size;
+            return intro->regs.size;
 
         default:
             return 0xFFFFFFFF;
@@ -221,56 +244,55 @@ static void intro_mmio_write(void *opaque, hwaddr addr, uint64_t val,
 
     switch(addr >> 2)
     {
-        case INTRO_REG_STATUS:
-            intro->status |= val & REG_STATUS_WRITE_MASK;
-            break;
-
-        case INTRO_REG_MSG_CR:
+        case INTRO_INTRO_REG_CR:
         {
-            uint32_t old = intro->msg.cr;
-            intro->msg.cr = (old & ~REG_MSG_CR_CLEAR_MASK) |
-                (val & REG_MSG_CR_WRITE_MASK);
+            uint32_t old = intro->regs.cr;
+            intro->regs.cr = (old & ~INTRO_REG_CR_CLEAR_MASK) |
+                (val & INTRO_REG_CR_WRITE_MASK);
 
-            if (!(old & REG_MSG_CR_RESET) && (val & REG_MSG_CR_RESET))
-                intro_handle_reset(intro);
+            if (!(old & INTRO_REG_CR_START) && (val & INTRO_REG_CR_START))
+                intro_handle_start(intro);
 
-            if (!(old & REG_MSG_CR_ADD_SEGMENT) && (val & REG_MSG_CR_ADD_SEGMENT))
+            if (!(old & INTRO_REG_CR_ADD_SEGMENT) && (val & INTRO_REG_CR_ADD_SEGMENT))
                 intro_handle_add_segment(intro);
 
-            if (!(old & REG_MSG_CR_FINISH) && (val & REG_MSG_CR_FINISH))
+            if (!(old & INTRO_REG_CR_FINISH) && (val & INTRO_REG_CR_FINISH))
                 intro_handle_finish(intro);
+
+            if (!(old & INTRO_REG_CR_UNMAP) && (val & INTRO_REG_CR_UNMAP))
+                intro_handle_unmap(intro);
 
             break;
         }
 
         case INTRO_REG_MSG_TYPE:
-            if (intro->msg.cr & REG_STATUS_WRITE_MASK)
+            if (intro->regs.cr & INTRO_REG_CR_WRITE_MASK)
                 return;
 
-            intro->msg.type = val;
+            intro->regs.type = val;
             break;
 
         case INTRO_REG_MSG_ADDR_L:
-            if (intro->msg.cr & REG_STATUS_WRITE_MASK)
+            if (intro->regs.cr & INTRO_REG_CR_WRITE_MASK)
                 return;
 
-            intro->msg.addr = (intro->msg.addr & 0xffffffff00000000) |
+            intro->regs.addr = (intro->regs.addr & 0xffffffff00000000) |
                     (val & 0xFFFFFFFF);
             break;
 
         case INTRO_REG_MSG_ADDR_H:
-            if (intro->msg.cr & REG_STATUS_WRITE_MASK)
+            if (intro->regs.cr & INTRO_REG_CR_WRITE_MASK)
                 return;
 
-            intro->msg.addr = (intro->msg.addr & 0xffffffff) |
+            intro->regs.addr = (intro->regs.addr & 0xffffffff) |
                     ((val & 0xFFFFFFFF) << 32);
             break;
 
         case INTRO_REG_MSG_SIZE:
-            if (intro->msg.size & REG_STATUS_WRITE_MASK)
+            if (intro->regs.size & INTRO_REG_CR_WRITE_MASK)
                 return;
 
-            intro->msg.size = val;
+            intro->regs.size = val;
             break;
     }
 }
@@ -285,62 +307,77 @@ static const MemoryRegionOps intro_mmio_ops = {
     }
 };
 
-static void intro_handle_reset(IntroState *intro)
+static void intro_handle_start(IntroState *intro)
 {
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&intro->chardev)) {
-      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_RESET) | REG_MSG_CR_NOCONN;
-      return;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NOCONN);
+        return;
+    }
+
+    // check if we are out of map slots
+    if (intro->map_count == MAX_MAPS) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NORES);
+        return;
     }
 
     // send a segment reset message
-    Msg msg = { .msg = INTRO_MSG_RESET };
+    Msg msg = { .msg = INTRO_MSG_MAP };
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
-        INTRO_MSG_RESET_SIZE) != INTRO_MSG_RESET_SIZE) {
-      intro->msg.cr |= REG_MSG_CR_NOCONN;
+        INTRO_MSG_MAP_SIZE) != INTRO_MSG_MAP_SIZE) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NOCONN);
+        return;
     }
 
-    intro->msg.cr &= ~REG_MSG_CR_RESET;
+    intro->finished = false;
+    intro->segments = 0;
+    intro->regs.cr &= ~INTRO_REG_CR_START;
 }
 
 static void intro_handle_add_segment(IntroState *intro)
 {
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&intro->chardev)) {
-      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_NOCONN;
-      return;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+        return;
+    }
+
+    // ensure that there is a mapping in progress
+    if (intro->finished) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_DEVERR);
+        return;
     }
 
     struct MemoryRegion *sysram = get_system_memory();
     struct MemoryRegionSection mrs;
 
     // lookup the address
-    mrs = memory_region_find(sysram, intro->msg.addr,
-            intro->msg.size);
+    mrs = memory_region_find(sysram, intro->regs.addr,
+            intro->regs.size);
 
     // ensure it's valid, and it's pointing to system RAM
     if (!mrs.mr || !memory_region_is_ram(mrs.mr)) {
-      memory_region_unref(mrs.mr);
-      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
-      return;
+        memory_region_unref(mrs.mr);
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_BADADDR);
+        return;
     }
 
     // get the fd for the RAM
     int fd = memory_region_get_fd(mrs.mr);
     if (fd == -1) {
-      memory_region_unref(mrs.mr);
-      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
-      return;
+        memory_region_unref(mrs.mr);
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_BADADDR);
+        return;
     }
 
     // see if we have already sent the fd to the client for this region
-    int i;
     int fd_index = -1;
+    int i;
     for(i = 0; i < MAX_FDS && intro->sent_fds[i] != -1; ++i) {
-      if (intro->sent_fds[i] == fd) {
-        fd_index = i;
-        break;
-      }
+        if (intro->sent_fds[i] == fd) {
+            fd_index = i;
+            break;
+        }
     }
 
     // check if not found
@@ -348,33 +385,35 @@ static void intro_handle_add_segment(IntroState *intro)
       // check if out of room
       if (i == MAX_FDS) {
         memory_region_unref(mrs.mr);
-        intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NORES);
         return;
       }
 
-      // flag fd as sent
+      // flag fd as sent and set it's ID
       intro->sent_fds[i] = fd;
+      intro->fd_ids[i]   = intro->last_fd_id++;
 
       // send the fd with the id
       Msg msg = {
-        .msg     = INTRO_MSG_FD,
-        .u.fd.id = memory_region_get_ram_addr(mrs.mr)
+          .msg     = INTRO_MSG_FD,
+          .u.fd.id = intro->fd_ids[i]
       };
 
       qemu_chr_fe_set_msgfds(&intro->chardev, &fd, 1);
       if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
           INTRO_MSG_FD_SIZE) != INTRO_MSG_FD_SIZE) {
-        memory_region_unref(mrs.mr);
-        intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_ADD_SEGMENT) | REG_MSG_CR_BADADDR;
-        return;
+          memory_region_unref(mrs.mr);
+          INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+          return;
       }
     }
 
     // send the segment message
     Msg msg = {
-      .msg            = INTRO_MSG_SEGMENT,
-      .u.segment.addr = mrs.offset_within_region,
-      .u.segment.size = intro->msg.size
+        .msg             = INTRO_MSG_SEGMENT,
+        .u.segment.fd_id = intro->fd_ids[i],
+        .u.segment.addr  = mrs.offset_within_region,
+        .u.segment.size  = intro->regs.size
     };
 
     // release the memory region
@@ -383,31 +422,85 @@ static void intro_handle_add_segment(IntroState *intro)
     // send the segment info
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
         INTRO_MSG_SEGMENT_SIZE) != INTRO_MSG_SEGMENT_SIZE) {
-      intro->msg.cr |= REG_MSG_CR_NOCONN;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+        return;
     }
 
-    intro->msg.cr &= ~REG_MSG_CR_ADD_SEGMENT;
+    ++intro->segments;
+    intro->regs.cr &= ~INTRO_REG_CR_ADD_SEGMENT;
 }
 
 static void intro_handle_finish(IntroState *intro) {
 
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&intro->chardev)) {
-      intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_FINISH) | REG_MSG_CR_NOCONN;
-      return;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_NOCONN);
+        return;
     }
+
+    // check for a zero segment map
+    if (intro->segments == 0) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_DEVERR);
+        return;
+    }
+
+    // find a free map id
+    int i;
+    for(i = 0; i < MAX_MAPS; ++i)
+      if (!intro->map_used[i])
+      {
+        intro->map_used[i] = true;
+        intro->regs.addr   = i;
+        ++intro->map_count;
+        break;
+      }
+
+    assert(i < MAX_MAPS);
 
     // send the finish message
     Msg msg = {
-      .msg           = INTRO_MSG_FINISH,
-      .u.finish.type = intro->msg.type
+        .msg           = INTRO_MSG_FINISH,
+        .u.finish.type = intro->regs.type,
+        .u.finish.id   = i
     };
+
     if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
         INTRO_MSG_FINISH_SIZE) != INTRO_MSG_FINISH_SIZE) {
-      intro->msg.cr |= REG_MSG_CR_NOCONN;
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_NOCONN);
     }
 
-    intro->msg.cr &= ~REG_MSG_CR_FINISH;
+    intro->finished = true;
+    intro->segments = 0;
+    intro->regs.cr &= ~INTRO_REG_CR_FINISH;
+}
+
+static void intro_handle_unmap(IntroState *intro) {
+    // check for a chardev connection
+    if (!qemu_chr_fe_backend_open(&intro->chardev)) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_NOCONN);
+        return;
+    }
+
+    uint32_t index = intro->regs.addr & 0xFFFFFFFF;
+    if (index > MAX_MAPS || !intro->map_used[index]) {
+        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_DEVERR);
+        return;
+    }
+
+    // send the unmap message
+    Msg msg = {
+        .msg        = INTRO_MSG_UNMAP,
+        .u.unmap.id = index,
+    };
+
+    intro->pending_unmap = index;
+    if (qemu_chr_fe_write_all(&intro->chardev, (const uint8_t *)&msg,
+        INTRO_MSG_UNMAP_SIZE) != INTRO_MSG_UNMAP_SIZE) {
+      INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_NOCONN);
+      return;
+    }
+
+    // this completes in `intro_chr_read` on INTRO_MSG_UNMAP
 }
 
 static int intro_chr_can_receive(void *opaque)
@@ -432,6 +525,14 @@ static void intro_chr_read(void *opaque, const uint8_t *buf, int size)
     {
       switch(le32_to_cpu(*msgs))
       {
+        case INTRO_MSG_UNMAP:
+          if (intro->pending_unmap == -1)
+            break;
+
+          intro->map_used[intro->pending_unmap] = 0;
+          intro->regs.cr &= ~INTRO_REG_CR_UNMAP;
+          break;
+
         default:
           // invalid messages are just ignored for now
           break;
@@ -455,6 +556,27 @@ static gboolean intro_chr_hup_watch(GIOChannel *chan, GIOCondition cond, void *o
     return true;
 }
 
+static void intro_reset(IntroState *intro)
+{
+    if (intro->watch) {
+        g_source_remove(intro->watch);
+        intro->watch = 0;
+    }
+
+    for(int i = 0; i < MAX_FDS; ++i) {
+        intro->sent_fds[i] = -1;
+    }
+
+    for(int i = 0; i < MAX_MAPS; ++i) {
+        intro->map_used[i] = false;
+    }
+
+    intro->regs.cr       = INTRO_REG_CR_NOCONN;
+    intro->finished      = true;
+    intro->segments      = 0;
+    intro->pending_unmap = -1;
+}
+
 static void intro_chr_event(void *opaque, int event)
 {
     IntroState *intro = opaque;
@@ -464,21 +586,11 @@ static void intro_chr_event(void *opaque, int event)
         case CHR_EVENT_OPENED:
           intro->watch = qemu_chr_fe_add_watch(&intro->chardev, G_IO_HUP,
               intro_chr_hup_watch, intro);
+          intro->regs.cr &= ~INTRO_REG_CR_NOCONN;
           break;
 
         case CHR_EVENT_CLOSED:
-          // if there was a message in progress, complete it and set the noconn error flag
-          if (intro->msg.cr & REG_MSG_CR_WRITE_MASK)
-            intro->msg.cr = (intro->msg.cr & ~REG_MSG_CR_WRITE_MASK) | REG_MSG_CR_NOCONN;
-
-          if (intro->watch) {
-              g_source_remove(intro->watch);
-              intro->watch = 0;
-          }
-
-          for(int i = 0; i < MAX_FDS; ++i)
-            intro->sent_fds[i] = -1;
-
+          intro_reset(intro);
           break;
     }
 }
@@ -504,9 +616,7 @@ static void pci_intro_realize(PCIDevice *pdev, Error **errp)
 
     pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &intro->mmio);
 
-    intro->watch  = 0;
-    intro->status = 0x0;
-    intro->msg.cr = 0x0;
+    intro_reset(intro);
 
     // setup the chardev
     qemu_chr_fe_set_handlers(&intro->chardev, intro_chr_can_receive,
@@ -530,7 +640,7 @@ static void intro_instance_init(Object *obj)
 {
     IntroState *intro = INTRO(obj);
 
-    memset(&intro->msg, 0, sizeof(intro->msg));
+    memset(&intro->regs, 0, sizeof(intro->regs));
     for(int i = 0; i < MAX_FDS; ++i)
       intro->sent_fds[i] = -1;
 }
