@@ -69,7 +69,7 @@ config IVSHMEM_DEVICE
     default y if PCI_DEVICES
     depends on PCI && LINUX && IVSHMEM && MSI_NONBROKEN
 
-config INTROSPECTION_DEVICE
+config PORTHOLE_DEVICE
     bool
     default y if PCI_DEVICES
     depends on PCI && LINUX && MSI_NONBROKEN
