@@ -73,37 +73,37 @@
   C  = Clear
 */
 
-#define INTRO_REG_CR_START       (1 << 1) // SW=S, HW=C, start of a mapping
-#define INTRO_REG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C, add a segment to mapping
-#define INTRO_REG_CR_FINISH      (1 << 3) // SW=S, HW=C, end of segments
-#define INTRO_REG_CR_UNMAP       (1 << 4) // SW=S, HW=C, unmap a segment
+#define PH_REG_CR_START       (1 << 1) // SW=S, HW=C, start of a mapping
+#define PH_REG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C, add a segment to mapping
+#define PH_REG_CR_FINISH      (1 << 3) // SW=S, HW=C, end of segments
+#define PH_REG_CR_UNMAP       (1 << 4) // SW=S, HW=C, unmap a segment
 
-#define INTRO_REG_CR_TIMEOUT     (1 << 5) // HW=S, HW=C, timeout occured
-#define INTRO_REG_CR_BADADDR     (1 << 6) // HW=S, HW=C, bad address specified
-#define INTRO_REG_CR_NOCONN      (1 << 7) // HW=S, HW=C, no client connection
-#define INTRO_REG_CR_NORES       (1 << 8) // HW=S, HW=C, no resources left
-#define INTRO_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
+#define PH_REG_CR_TIMEOUT     (1 << 5) // HW=S, HW=C, timeout occured
+#define PH_REG_CR_BADADDR     (1 << 6) // HW=S, HW=C, bad address specified
+#define PH_REG_CR_NOCONN      (1 << 7) // HW=S, HW=C, no client connection
+#define PH_REG_CR_NORES       (1 << 8) // HW=S, HW=C, no resources left
+#define PH_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
 
-#define INTRO_REG_CR_WRITE_MASK ( \
-    INTRO_REG_CR_START       | \
-    INTRO_REG_CR_ADD_SEGMENT | \
-    INTRO_REG_CR_FINISH      | \
-    INTRO_REG_CR_UNMAP       | \
+#define PH_REG_CR_WRITE_MASK ( \
+    PH_REG_CR_START       | \
+    PH_REG_CR_ADD_SEGMENT | \
+    PH_REG_CR_FINISH      | \
+    PH_REG_CR_UNMAP       | \
     0x0 \
 )
 
-#define INTRO_REG_CR_CLEAR_MASK ( \
-    INTRO_REG_CR_TIMEOUT | \
-    INTRO_REG_CR_BADADDR | \
-    INTRO_REG_CR_NOCONN  | \
-    INTRO_REG_CR_NORES   | \
-    INTRO_REG_CR_DEVERR  | \
+#define PH_REG_CR_CLEAR_MASK ( \
+    PH_REG_CR_TIMEOUT | \
+    PH_REG_CR_BADADDR | \
+    PH_REG_CR_NOCONN  | \
+    PH_REG_CR_NORES   | \
+    PH_REG_CR_DEVERR  | \
     0x0 \
 )
 
-#define INTRO_REG_CR_SET_ERR(clear, set) \
-  ph->regs.cr = (ph->regs.cr & ~((clear) & INTRO_REG_CR_WRITE_MASK)) | \
-      ((set) & INTRO_REG_CR_CLEAR_MASK)
+#define PH_REG_CR_SET_ERR(clear, set) \
+  ph->regs.cr = (ph->regs.cr & ~((clear) & PH_REG_CR_WRITE_MASK)) | \
+      ((set) & PH_REG_CR_CLEAR_MASK)
 
 /*
   Socket communication defines
@@ -139,33 +139,33 @@ typedef struct {
   } u;
 } __attribute__ ((packed)) PHMsg;
 
-#define INTRO_MSG_MAP     0x1 // start of a map sequence
-#define INTRO_MSG_FD      0x2 // file descriptor
-#define INTRO_MSG_SEGMENT 0x3 // map segment
-#define INTRO_MSG_FINISH  0x4 // finish of map sequence
-#define INTRO_MSG_UNMAP   0x5 // unmap a previous map
+#define PH_MSG_MAP     0x1 // start of a map sequence
+#define PH_MSG_FD      0x2 // file descriptor
+#define PH_MSG_SEGMENT 0x3 // map segment
+#define PH_MSG_FINISH  0x4 // finish of map sequence
+#define PH_MSG_UNMAP   0x5 // unmap a previous map
 
-#define INTRO_MSG_MAP_SIZE     (sizeof(uint32_t))
-#define INTRO_MSG_FD_SIZE      (sizeof(uint32_t) + sizeof(PHMsgFd))
-#define INTRO_MSG_SEGMENT_SIZE (sizeof(uint32_t) + sizeof(PHMsgSegment))
-#define INTRO_MSG_FINISH_SIZE  (sizeof(uint32_t) + sizeof(PHMsgFinish))
-#define INTRO_MSG_UNMAP_SIZE   (sizeof(uint32_t) + sizeof(PHMsgUnmap))
+#define PH_MSG_MAP_SIZE     (sizeof(uint32_t))
+#define PH_MSG_FD_SIZE      (sizeof(uint32_t) + sizeof(PHMsgFd))
+#define PH_MSG_SEGMENT_SIZE (sizeof(uint32_t) + sizeof(PHMsgSegment))
+#define PH_MSG_FINISH_SIZE  (sizeof(uint32_t) + sizeof(PHMsgFinish))
+#define PH_MSG_UNMAP_SIZE   (sizeof(uint32_t) + sizeof(PHMsgUnmap))
 
 // all registers are 32-bit
 enum IntoRegs {
     // registers are readonly while any of REG_STATUS_CR_WRITE_MASK is set
-    INTRO_INTRO_REG_CR = 0,
-    INTRO_REG_MSG_TYPE,
-    INTRO_REG_MSG_ADDR_L,
-    INTRO_REG_MSG_ADDR_H,
-    INTRO_REG_MSG_SIZE,
+    PH_REG_CR = 0,
+    PH_REG_MSG_TYPE,
+    PH_REG_MSG_ADDR_L,
+    PH_REG_MSG_ADDR_H,
+    PH_REG_MSG_SIZE,
 
     // pow2 padding
-    INTRO_REG_RESERVED1,
-    INTRO_REG_RESERVED2,
-    INTRO_REG_RESERVED3,
+    PH_REG_RESERVED1,
+    PH_REG_RESERVED2,
+    PH_REG_RESERVED3,
 
-    INTRO_REG_LAST
+    PH_REG_LAST
 };
 
 typedef struct {
@@ -173,7 +173,7 @@ typedef struct {
     uint32_t type;
     hwaddr   addr;
     uint32_t size;
-} IntroRegs;
+} PHRegs;
 
 #define MAX_FDS  16
 #define MAX_MAPS 32
@@ -204,7 +204,7 @@ typedef struct {
     int         pending_unmap;
 
     // registers
-    IntroRegs regs;
+    PHRegs regs;
 
 } PHState;
 
@@ -220,16 +220,16 @@ static uint64_t porthole_mmio_read(void *opaque, hwaddr addr, unsigned size)
 
     switch(addr >> 2)
     {
-        case INTRO_INTRO_REG_CR:
+        case PH_REG_CR:
             return ph->regs.cr;
 
-        case INTRO_REG_MSG_ADDR_L:
+        case PH_REG_MSG_ADDR_L:
             return ph->regs.addr & 0xFFFFFFFF;
 
-        case INTRO_REG_MSG_ADDR_H:
+        case PH_REG_MSG_ADDR_H:
             return (ph->regs.addr >> 32) & 0xFFFFFFFF;
 
-        case INTRO_REG_MSG_SIZE:
+        case PH_REG_MSG_SIZE:
             return ph->regs.size;
 
         default:
@@ -244,56 +244,56 @@ static void porthole_mmio_write(void *opaque, hwaddr addr, uint64_t val,
 
     switch(addr >> 2)
     {
-        case INTRO_INTRO_REG_CR:
+        case PH_REG_CR:
         {
             uint32_t old = ph->regs.cr;
-            ph->regs.cr = (old & ~INTRO_REG_CR_CLEAR_MASK) |
-                (val & INTRO_REG_CR_WRITE_MASK);
+            ph->regs.cr = (old & ~PH_REG_CR_CLEAR_MASK) |
+                (val & PH_REG_CR_WRITE_MASK);
 
-            if (!(old & INTRO_REG_CR_START) &&
-                (val & INTRO_REG_CR_START))
+            if (!(old & PH_REG_CR_START) &&
+                (val & PH_REG_CR_START))
                 porthole_handle_start(ph);
 
-            if (!(old & INTRO_REG_CR_ADD_SEGMENT) &&
-                (val & INTRO_REG_CR_ADD_SEGMENT))
+            if (!(old & PH_REG_CR_ADD_SEGMENT) &&
+                (val & PH_REG_CR_ADD_SEGMENT))
                 porthole_handle_add_segment(ph);
 
-            if (!(old & INTRO_REG_CR_FINISH) &&
-                (val & INTRO_REG_CR_FINISH))
+            if (!(old & PH_REG_CR_FINISH) &&
+                (val & PH_REG_CR_FINISH))
                 porthole_handle_finish(ph);
 
-            if (!(old & INTRO_REG_CR_UNMAP) &&
-                (val & INTRO_REG_CR_UNMAP))
+            if (!(old & PH_REG_CR_UNMAP) &&
+                (val & PH_REG_CR_UNMAP))
                 porthole_handle_unmap(ph);
 
             break;
         }
 
-        case INTRO_REG_MSG_TYPE:
-            if (ph->regs.cr & INTRO_REG_CR_WRITE_MASK)
+        case PH_REG_MSG_TYPE:
+            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
                 return;
 
             ph->regs.type = val;
             break;
 
-        case INTRO_REG_MSG_ADDR_L:
-            if (ph->regs.cr & INTRO_REG_CR_WRITE_MASK)
+        case PH_REG_MSG_ADDR_L:
+            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
                 return;
 
             ph->regs.addr = (ph->regs.addr & 0xffffffff00000000) |
                     (val & 0xFFFFFFFF);
             break;
 
-        case INTRO_REG_MSG_ADDR_H:
-            if (ph->regs.cr & INTRO_REG_CR_WRITE_MASK)
+        case PH_REG_MSG_ADDR_H:
+            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
                 return;
 
             ph->regs.addr = (ph->regs.addr & 0xffffffff) |
                     ((val & 0xFFFFFFFF) << 32);
             break;
 
-        case INTRO_REG_MSG_SIZE:
-            if (ph->regs.size & INTRO_REG_CR_WRITE_MASK)
+        case PH_REG_MSG_SIZE:
+            if (ph->regs.size & PH_REG_CR_WRITE_MASK)
                 return;
 
             ph->regs.size = val;
@@ -315,40 +315,40 @@ static void porthole_handle_start(PHState *ph)
 {
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&ph->chardev)) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NOCONN);
+        PH_REG_CR_SET_ERR(PH_REG_CR_START, PH_REG_CR_NOCONN);
         return;
     }
 
     // check if we are out of map slots
     if (ph->map_count == MAX_MAPS) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NORES);
+        PH_REG_CR_SET_ERR(PH_REG_CR_START, PH_REG_CR_NORES);
         return;
     }
 
     // send a segment reset message
-    PHMsg msg = { .msg = INTRO_MSG_MAP };
+    PHMsg msg = { .msg = PH_MSG_MAP };
     if (qemu_chr_fe_write_all(&ph->chardev, (const uint8_t *)&msg,
-        INTRO_MSG_MAP_SIZE) != INTRO_MSG_MAP_SIZE) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_START, INTRO_REG_CR_NOCONN);
+        PH_MSG_MAP_SIZE) != PH_MSG_MAP_SIZE) {
+        PH_REG_CR_SET_ERR(PH_REG_CR_START, PH_REG_CR_NOCONN);
         return;
     }
 
     ph->finished = false;
     ph->segments = 0;
-    ph->regs.cr &= ~INTRO_REG_CR_START;
+    ph->regs.cr &= ~PH_REG_CR_START;
 }
 
 static void porthole_handle_add_segment(PHState *ph)
 {
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&ph->chardev)) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_NOCONN);
         return;
     }
 
     // ensure that there is a mapping in progress
     if (ph->finished) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_DEVERR);
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_DEVERR);
         return;
     }
 
@@ -362,7 +362,7 @@ static void porthole_handle_add_segment(PHState *ph)
     // ensure it's valid, and it's pointing to system RAM
     if (!mrs.mr || !memory_region_is_ram(mrs.mr)) {
         memory_region_unref(mrs.mr);
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_BADADDR);
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_BADADDR);
         return;
     }
 
@@ -370,7 +370,7 @@ static void porthole_handle_add_segment(PHState *ph)
     int fd = memory_region_get_fd(mrs.mr);
     if (fd == -1) {
         memory_region_unref(mrs.mr);
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_BADADDR);
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_BADADDR);
         return;
     }
 
@@ -389,7 +389,7 @@ static void porthole_handle_add_segment(PHState *ph)
       // check if out of room
       if (i == MAX_FDS) {
         memory_region_unref(mrs.mr);
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NORES);
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_NORES);
         return;
       }
 
@@ -399,22 +399,22 @@ static void porthole_handle_add_segment(PHState *ph)
 
       // send the fd with the id
       PHMsg msg = {
-          .msg     = INTRO_MSG_FD,
+          .msg     = PH_MSG_FD,
           .u.fd.id = ph->fd_ids[i]
       };
 
       qemu_chr_fe_set_msgfds(&ph->chardev, &fd, 1);
       if (qemu_chr_fe_write_all(&ph->chardev, (const uint8_t *)&msg,
-          INTRO_MSG_FD_SIZE) != INTRO_MSG_FD_SIZE) {
+          PH_MSG_FD_SIZE) != PH_MSG_FD_SIZE) {
           memory_region_unref(mrs.mr);
-          INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+          PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_NOCONN);
           return;
       }
     }
 
     // send the segment message
     PHMsg msg = {
-        .msg             = INTRO_MSG_SEGMENT,
+        .msg             = PH_MSG_SEGMENT,
         .u.segment.fd_id = ph->fd_ids[i],
         .u.segment.addr  = mrs.offset_within_region,
         .u.segment.size  = ph->regs.size
@@ -425,26 +425,26 @@ static void porthole_handle_add_segment(PHState *ph)
 
     // send the segment info
     if (qemu_chr_fe_write_all(&ph->chardev, (const uint8_t *)&msg,
-        INTRO_MSG_SEGMENT_SIZE) != INTRO_MSG_SEGMENT_SIZE) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_ADD_SEGMENT, INTRO_REG_CR_NOCONN);
+        PH_MSG_SEGMENT_SIZE) != PH_MSG_SEGMENT_SIZE) {
+        PH_REG_CR_SET_ERR(PH_REG_CR_ADD_SEGMENT, PH_REG_CR_NOCONN);
         return;
     }
 
     ++ph->segments;
-    ph->regs.cr &= ~INTRO_REG_CR_ADD_SEGMENT;
+    ph->regs.cr &= ~PH_REG_CR_ADD_SEGMENT;
 }
 
 static void porthole_handle_finish(PHState *ph) {
 
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&ph->chardev)) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_NOCONN);
+        PH_REG_CR_SET_ERR(PH_REG_CR_FINISH, PH_REG_CR_NOCONN);
         return;
     }
 
     // check for a zero segment map
     if (ph->segments == 0) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_DEVERR);
+        PH_REG_CR_SET_ERR(PH_REG_CR_FINISH, PH_REG_CR_DEVERR);
         return;
     }
 
@@ -463,48 +463,48 @@ static void porthole_handle_finish(PHState *ph) {
 
     // send the finish message
     PHMsg msg = {
-        .msg           = INTRO_MSG_FINISH,
+        .msg           = PH_MSG_FINISH,
         .u.finish.type = ph->regs.type,
         .u.finish.id   = i
     };
 
     if (qemu_chr_fe_write_all(&ph->chardev, (const uint8_t *)&msg,
-        INTRO_MSG_FINISH_SIZE) != INTRO_MSG_FINISH_SIZE) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_FINISH, INTRO_REG_CR_NOCONN);
+        PH_MSG_FINISH_SIZE) != PH_MSG_FINISH_SIZE) {
+        PH_REG_CR_SET_ERR(PH_REG_CR_FINISH, PH_REG_CR_NOCONN);
     }
 
     ph->finished = true;
     ph->segments = 0;
-    ph->regs.cr &= ~INTRO_REG_CR_FINISH;
+    ph->regs.cr &= ~PH_REG_CR_FINISH;
 }
 
 static void porthole_handle_unmap(PHState *ph) {
     // check for a chardev connection
     if (!qemu_chr_fe_backend_open(&ph->chardev)) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_NOCONN);
+        PH_REG_CR_SET_ERR(PH_REG_CR_UNMAP, PH_REG_CR_NOCONN);
         return;
     }
 
     uint32_t index = ph->regs.addr & 0xFFFFFFFF;
     if (index > MAX_MAPS || !ph->map_used[index]) {
-        INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_DEVERR);
+        PH_REG_CR_SET_ERR(PH_REG_CR_UNMAP, PH_REG_CR_DEVERR);
         return;
     }
 
     // send the unmap message
     PHMsg msg = {
-        .msg        = INTRO_MSG_UNMAP,
+        .msg        = PH_MSG_UNMAP,
         .u.unmap.id = index,
     };
 
     ph->pending_unmap = index;
     if (qemu_chr_fe_write_all(&ph->chardev, (const uint8_t *)&msg,
-        INTRO_MSG_UNMAP_SIZE) != INTRO_MSG_UNMAP_SIZE) {
-      INTRO_REG_CR_SET_ERR(INTRO_REG_CR_UNMAP, INTRO_REG_CR_NOCONN);
+        PH_MSG_UNMAP_SIZE) != PH_MSG_UNMAP_SIZE) {
+      PH_REG_CR_SET_ERR(PH_REG_CR_UNMAP, PH_REG_CR_NOCONN);
       return;
     }
 
-    // this completes in `porthole_chr_read` on INTRO_MSG_UNMAP
+    // this completes in `porthole_chr_read` on PH_MSG_UNMAP
 }
 
 static int porthole_chr_can_receive(void *opaque)
@@ -529,12 +529,12 @@ static void porthole_chr_read(void *opaque, const uint8_t *buf, int size)
     {
       switch(le32_to_cpu(*msgs))
       {
-        case INTRO_MSG_UNMAP:
+        case PH_MSG_UNMAP:
           if (ph->pending_unmap == -1)
             break;
 
           ph->map_used[ph->pending_unmap] = 0;
-          ph->regs.cr &= ~INTRO_REG_CR_UNMAP;
+          ph->regs.cr &= ~PH_REG_CR_UNMAP;
           break;
 
         default:
@@ -576,7 +576,7 @@ static void porthole_reset(PHState *ph)
         ph->map_used[i] = false;
     }
 
-    ph->regs.cr       = INTRO_REG_CR_NOCONN;
+    ph->regs.cr       = PH_REG_CR_NOCONN;
     ph->finished      = true;
     ph->segments      = 0;
     ph->pending_unmap = -1;
@@ -591,7 +591,7 @@ static void porthole_chr_event(void *opaque, int event)
         case CHR_EVENT_OPENED:
           ph->watch = qemu_chr_fe_add_watch(&ph->chardev, G_IO_HUP,
               porthole_chr_hup_watch, ph);
-          ph->regs.cr &= ~INTRO_REG_CR_NOCONN;
+          ph->regs.cr &= ~PH_REG_CR_NOCONN;
           break;
 
         case CHR_EVENT_CLOSED:
@@ -617,7 +617,7 @@ static void pci_porthole_realize(PCIDevice *pdev, Error **errp)
 
     // setup the communication registers
     memory_region_init_io(&ph->mmio, OBJECT(ph), &porthole_mmio_ops, ph,
-            "ph-mmio", INTRO_REG_LAST << 2);
+            "ph-mmio", PH_REG_LAST << 2);
 
     pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &ph->mmio);
 
