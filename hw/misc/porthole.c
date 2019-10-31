@@ -250,16 +250,20 @@ static void porthole_mmio_write(void *opaque, hwaddr addr, uint64_t val,
             ph->regs.cr = (old & ~INTRO_REG_CR_CLEAR_MASK) |
                 (val & INTRO_REG_CR_WRITE_MASK);
 
-            if (!(old & INTRO_REG_CR_START) && (val & INTRO_REG_CR_START))
+            if (!(old & INTRO_REG_CR_START) &&
+                (val & INTRO_REG_CR_START))
                 porthole_handle_start(ph);
 
-            if (!(old & INTRO_REG_CR_ADD_SEGMENT) && (val & INTRO_REG_CR_ADD_SEGMENT))
+            if (!(old & INTRO_REG_CR_ADD_SEGMENT) &&
+                (val & INTRO_REG_CR_ADD_SEGMENT))
                 porthole_handle_add_segment(ph);
 
-            if (!(old & INTRO_REG_CR_FINISH) && (val & INTRO_REG_CR_FINISH))
+            if (!(old & INTRO_REG_CR_FINISH) &&
+                (val & INTRO_REG_CR_FINISH))
                 porthole_handle_finish(ph);
 
-            if (!(old & INTRO_REG_CR_UNMAP) && (val & INTRO_REG_CR_UNMAP))
+            if (!(old & INTRO_REG_CR_UNMAP) &&
+                (val & INTRO_REG_CR_UNMAP))
                 porthole_handle_unmap(ph);
 
             break;
@@ -548,7 +552,8 @@ static void porthole_chr_read(void *opaque, const uint8_t *buf, int size)
     ph->buffer_pos = left;
 }
 
-static gboolean porthole_chr_hup_watch(GIOChannel *chan, GIOCondition cond, void *opaque) {
+static gboolean porthole_chr_hup_watch(GIOChannel *chan, GIOCondition cond,
+    void *opaque) {
     PHState *ph = opaque;
 
     qemu_chr_fe_disconnect(&ph->chardev);
