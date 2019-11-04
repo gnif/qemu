@@ -534,6 +534,9 @@ static void porthole_chr_read(void *opaque, const uint8_t *buf, int size)
             break;
 
           ph->map_used[ph->pending_unmap] = 0;
+          ph->pending_unmap = -1;
+          --ph->map_count;
+
           ph->regs.cr &= ~PH_REG_CR_UNMAP;
           break;
 
@@ -547,7 +550,7 @@ static void porthole_chr_read(void *opaque, const uint8_t *buf, int size)
     }
 
     if (left > 0)
-      memmove(ph->buffer, buf, left);
+      memmove(ph->buffer, msgs, left);
 
     ph->buffer_pos = left;
 }
