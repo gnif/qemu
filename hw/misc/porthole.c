@@ -129,8 +129,8 @@ typedef struct {
 } __attribute__ ((packed)) PHMsgUnmap;
 
 typedef struct {
-  uint8_t  len;  // the message length
-  uint32_t msg;  // the message ID
+  uint8_t len; // the message length
+  uint8_t msg; // the message ID
   union
   {
     PHMsgFd      fd;
@@ -146,7 +146,7 @@ typedef struct {
 #define PH_MSG_FINISH  0x4 // finish of map sequence
 #define PH_MSG_UNMAP   0x5 // unmap a previous map
 
-#define PH_MSG_BASE_SIZE    (sizeof(uint32_t) + sizeof(uint8_t))
+#define PH_MSG_BASE_SIZE    (sizeof(uint8_t) + sizeof(uint8_t))
 #define PH_MSG_MAP_SIZE     (PH_MSG_BASE_SIZE)
 #define PH_MSG_FD_SIZE      (PH_MSG_BASE_SIZE + sizeof(PHMsgFd))
 #define PH_MSG_SEGMENT_SIZE (PH_MSG_BASE_SIZE + sizeof(PHMsgSegment))
