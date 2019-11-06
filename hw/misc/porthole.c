@@ -65,47 +65,6 @@
 #define INTRO(obj) OBJECT_CHECK(PHState, obj, "porthole")
 
 /*
-  Register defines
-
-  SW = Software
-  HW = Hardware
-  S  = Set
-  C  = Clear
-*/
-
-#define PH_REG_CR_START       (1 << 1) // SW=S, HW=C, start of a mapping
-#define PH_REG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C, add a segment to mapping
-#define PH_REG_CR_FINISH      (1 << 3) // SW=S, HW=C, end of segments
-#define PH_REG_CR_UNMAP       (1 << 4) // SW=S, HW=C, unmap a segment
-
-#define PH_REG_CR_TIMEOUT     (1 << 5) // HW=S, HW=C, timeout occured
-#define PH_REG_CR_BADADDR     (1 << 6) // HW=S, HW=C, bad address specified
-#define PH_REG_CR_NOCONN      (1 << 7) // HW=S, HW=C, no client connection
-#define PH_REG_CR_NORES       (1 << 8) // HW=S, HW=C, no resources left
-#define PH_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
-
-#define PH_REG_CR_WRITE_MASK ( \
-    PH_REG_CR_START       | \
-    PH_REG_CR_ADD_SEGMENT | \
-    PH_REG_CR_FINISH      | \
-    PH_REG_CR_UNMAP       | \
-    0x0 \
-)
-
-#define PH_REG_CR_CLEAR_MASK ( \
-    PH_REG_CR_TIMEOUT | \
-    PH_REG_CR_BADADDR | \
-    PH_REG_CR_NOCONN  | \
-    PH_REG_CR_NORES   | \
-    PH_REG_CR_DEVERR  | \
-    0x0 \
-)
-
-#define PH_REG_CR_SET_ERR(clear, set) \
-  ph->regs.cr = (ph->regs.cr & ~((clear) & PH_REG_CR_WRITE_MASK)) | \
-      ((set) & PH_REG_CR_CLEAR_MASK)
-
-/*
   Socket communication defines
 */
 
@@ -155,20 +114,81 @@ typedef struct {
 
 // all registers are 32-bit
 enum IntoRegs {
-    // registers are readonly while any of REG_STATUS_CR_WRITE_MASK is set
     PH_REG_CR = 0,
+    PH_REG_ISR,
     PH_REG_MSG_TYPE,
+    PH_REG_MSG_SIZE,
+
+    // 64-bit aligned
     PH_REG_MSG_ADDR_L,
     PH_REG_MSG_ADDR_H,
-    PH_REG_MSG_SIZE,
 
     // pow2 padding
     PH_REG_RESERVED1,
     PH_REG_RESERVED2,
-    PH_REG_RESERVED3,
 
     PH_REG_LAST
 };
+
+/*
+  Register defines
+
+  SW = Software
+  HW = Hardware
+  S  = Set
+  C  = Clear
+*/
+
+#define PH_REG_CR_IRQ         (1 << 0) // SW=S, SW=C, enable interrupts
+#define PH_REG_CR_START       (1 << 1) // SW=S, HW=C, start of a mapping
+#define PH_REG_CR_ADD_SEGMENT (1 << 2) // SW=S, HW=C, add a segment to mapping
+#define PH_REG_CR_FINISH      (1 << 3) // SW=S, HW=C, end of segments
+#define PH_REG_CR_UNMAP       (1 << 4) // SW=S, HW=C, unmap a segment
+
+#define PH_REG_CR_TIMEOUT     (1 << 5) // HW=S, HW=C, timeout occured
+#define PH_REG_CR_BADADDR     (1 << 6) // HW=S, HW=C, bad address specified
+#define PH_REG_CR_NOCONN      (1 << 7) // HW=S, HW=C, no client connection
+#define PH_REG_CR_NORES       (1 << 8) // HW=S, HW=C, no resources left
+#define PH_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
+
+#define PH_REG_CR_WRITE_MASK ( \
+    PH_REG_CR_START       | \
+    PH_REG_CR_ADD_SEGMENT | \
+    PH_REG_CR_FINISH      | \
+    PH_REG_CR_UNMAP       | \
+    PH_REG_CR_IRQ         | \
+    0x0 \
+)
+
+#define PH_REG_CR_RO_MASK ( \
+    PH_REG_CR_START       | \
+    PH_REG_CR_ADD_SEGMENT | \
+    PH_REG_CR_FINISH      | \
+    PH_REG_CR_UNMAP       | \
+    0 \
+)
+
+#define PH_REG_CR_CLEAR_MASK ( \
+    PH_REG_CR_TIMEOUT | \
+    PH_REG_CR_BADADDR | \
+    PH_REG_CR_NOCONN  | \
+    PH_REG_CR_NORES   | \
+    PH_REG_CR_DEVERR  | \
+    PH_REG_CR_IRQ     | \
+    0x0 \
+)
+
+#define PH_REG_CR_SET_ERR(clear, set) \
+  ph->regs.cr = (ph->regs.cr & ~((clear) & PH_REG_CR_WRITE_MASK)) | \
+      ((set) & PH_REG_CR_CLEAR_MASK)
+
+// All ISRs are set by hardware and cleared by writing to them
+
+/* client connected/disconnected
+ * check PH_REG_CR_NOCONN to determine the current state
+ */
+#define PH_REG_ISR_CONNECT    (1 << 0)
+#define PH_REG_ISR_DISCONNECT (1 << 1)
 
 typedef struct {
     uint32_t l;
@@ -177,6 +197,7 @@ typedef struct {
 
 typedef struct {
     uint32_t cr;
+    uint32_t isr;
     uint32_t type;
     union {
         PHAddr   a;
@@ -233,6 +254,9 @@ static uint64_t porthole_mmio_read(void *opaque, hwaddr addr, unsigned size)
         case PH_REG_CR:
             return ph->regs.cr;
 
+        case PH_REG_ISR:
+            return ph->regs.isr;
+
         case PH_REG_MSG_ADDR_L:
             return ph->regs.addr.a.l;
 
@@ -276,32 +300,51 @@ static void porthole_mmio_write(void *opaque, hwaddr addr, uint64_t val,
                 (val & PH_REG_CR_UNMAP))
                 porthole_handle_unmap(ph);
 
+            if (!(old & PH_REG_CR_IRQ) &&
+                (val & PH_REG_CR_IRQ))
+            {
+                if (ph->regs.isr) {
+                    pci_set_irq(&ph->pdev, 1);
+                }
+            } else {
+              if (!(val & PH_REG_CR_IRQ) &&
+                  (old & PH_REG_CR_IRQ)) {
+                  pci_set_irq(&ph->pdev, 0);
+              }
+            }
+
             break;
         }
 
+        case PH_REG_ISR:
+            ph->regs.isr &= ~val;
+            if (!ph->regs.isr)
+                pci_set_irq(&ph->pdev, 0);
+            break;
+
         case PH_REG_MSG_TYPE:
-            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
+            if (ph->regs.cr & PH_REG_CR_RO_MASK)
                 return;
 
             ph->regs.type = val;
             break;
 
         case PH_REG_MSG_ADDR_L:
-            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
+            if (ph->regs.cr & PH_REG_CR_RO_MASK)
                 return;
 
             ph->regs.addr.a.l = val;
             break;
 
         case PH_REG_MSG_ADDR_H:
-            if (ph->regs.cr & PH_REG_CR_WRITE_MASK)
+            if (ph->regs.cr & PH_REG_CR_RO_MASK)
                 return;
 
             ph->regs.addr.a.h = val;
             break;
 
         case PH_REG_MSG_SIZE:
-            if (ph->regs.size & PH_REG_CR_WRITE_MASK)
+            if (ph->regs.cr & PH_REG_CR_RO_MASK)
                 return;
 
             ph->regs.size = val;
@@ -591,7 +634,7 @@ static void porthole_reset(PHState *ph)
         ph->map_used[i] = false;
     }
 
-    ph->regs.cr       = PH_REG_CR_NOCONN;
+    ph->regs.cr      |= PH_REG_CR_NOCONN;
     ph->finished      = true;
     ph->segments      = 0;
     ph->pending_unmap = -1;
@@ -607,10 +650,20 @@ static void porthole_chr_event(void *opaque, int event)
           ph->watch = qemu_chr_fe_add_watch(&ph->chardev, G_IO_HUP,
               porthole_chr_hup_watch, ph);
           ph->regs.cr &= ~PH_REG_CR_NOCONN;
+
+          ph->regs.isr |= PH_REG_ISR_CONNECT;
+          if (ph->regs.cr & PH_REG_CR_IRQ) {
+              pci_set_irq(&ph->pdev, 1);
+          }
           break;
 
         case CHR_EVENT_CLOSED:
           porthole_reset(ph);
+
+          ph->regs.isr |= PH_REG_ISR_DISCONNECT;
+          if (ph->regs.cr & PH_REG_CR_IRQ) {
+              pci_set_irq(&ph->pdev, 1);
+          }
           break;
     }
 }
@@ -629,6 +682,9 @@ static void pci_porthole_realize(PCIDevice *pdev, Error **errp)
             (ph->subsystem_id >> 16) & 0xFFFF);
     pci_set_word(pdev->config + PCI_SUBSYSTEM_VENDOR_ID,
             ph->subsystem_id & 0xFFFF);
+
+    // enable interrupt pin A
+    pci_set_byte(pdev->config + PCI_INTERRUPT_PIN, 1);
 
     // setup the communication registers
     memory_region_init_io(&ph->mmio, OBJECT(ph), &porthole_mmio_ops, ph,
