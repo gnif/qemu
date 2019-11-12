@@ -632,7 +632,8 @@ static void porthole_reset(PHState *ph)
         ph->map_used[i] = false;
     }
 
-    ph->regs.cr      |= PH_REG_CR_NOCONN;
+    // ensure the unmap response is cleared when the client fails to ack
+    ph->regs.cr       = (ph->regs.cr & ~PH_REG_CR_UNMAP) | PH_REG_CR_NOCONN;
     ph->finished      = true;
     ph->segments      = 0;
     ph->pending_unmap = -1;
