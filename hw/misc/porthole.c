@@ -152,11 +152,11 @@ enum IntoRegs {
 #define PH_REG_CR_DEVERR      (1 << 9) // HW=S, HW=C, invalid device usage
 
 #define PH_REG_CR_WRITE_MASK ( \
+    PH_REG_CR_IRQ         | \
     PH_REG_CR_START       | \
     PH_REG_CR_ADD_SEGMENT | \
     PH_REG_CR_FINISH      | \
     PH_REG_CR_UNMAP       | \
-    PH_REG_CR_IRQ         | \
     0x0 \
 )
 
@@ -171,10 +171,8 @@ enum IntoRegs {
 #define PH_REG_CR_CLEAR_MASK ( \
     PH_REG_CR_TIMEOUT | \
     PH_REG_CR_BADADDR | \
-    PH_REG_CR_NOCONN  | \
     PH_REG_CR_NORES   | \
     PH_REG_CR_DEVERR  | \
-    PH_REG_CR_IRQ     | \
     0x0 \
 )
 
@@ -692,8 +690,6 @@ static void pci_porthole_realize(PCIDevice *pdev, Error **errp)
 
     pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &ph->mmio);
 
-    porthole_reset(ph);
-
     // setup the chardev
     qemu_chr_fe_set_handlers(&ph->chardev, porthole_chr_can_receive,
             porthole_chr_read, porthole_chr_event, NULL, ph, NULL, true);
@@ -715,10 +711,7 @@ static void pci_porthole_uninit(PCIDevice *pdev)
 static void porthole_instance_init(Object *obj)
 {
     PHState *ph = INTRO(obj);
-
-    memset(&ph->regs, 0, sizeof(ph->regs));
-    for(int i = 0; i < MAX_FDS; ++i)
-      ph->sent_fds[i] = -1;
+    porthole_reset(ph);
 }
 
 static Property porthole_properties[] = {
